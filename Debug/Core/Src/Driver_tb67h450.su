@@ -1,0 +1,4 @@
+../Core/Src/Driver_tb67h450.c:11:13:DacOutputVoltage	16	static
+../Core/Src/Driver_tb67h450.c:17:13:SetInputA	16	static
+../Core/Src/Driver_tb67h450.c:23:13:SetInputB	16	static
+../Core/Src/Driver_tb67h450.c:29:6:SetFocCurrentVector	24	static

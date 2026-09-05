@@ -1,0 +1,10 @@
+../Core/Src/encoder_calib.c:53:17:CycleMod	16	static
+../Core/Src/encoder_calib.c:59:16:CycleSubtract	32	static
+../Core/Src/encoder_calib.c:68:16:CycleAverage	32	static
+../Core/Src/encoder_calib.c:81:16:CycleDataAverage	40	static
+../Core/Src/encoder_calib.c:105:13:CalibrationDataCheck	32	static
+../Core/Src/encoder_calib.c:191:13:BuildCalibTable	48	static
+../Core/Src/encoder_calib.c:258:6:Calib_IsRunning	16	static
+../Core/Src/encoder_calib.c:264:6:Calib_Start	8	static
+../Core/Src/encoder_calib.c:284:6:Calib_Tick20kHz	24	static
+../Core/Src/encoder_calib.c:416:6:Calib_TickMainLoop	8	static
