@@ -7,8 +7,10 @@
 C_SRCS += \
 ../Core/Src/Driver_tb67h450.c \
 ../Core/Src/Encoder_mt6701.c \
+../Core/Src/board_config.c \
 ../Core/Src/can.c \
 ../Core/Src/encoder_calib.c \
+../Core/Src/flash_calib.c \
 ../Core/Src/gpio.c \
 ../Core/Src/main.c \
 ../Core/Src/spi.c \
@@ -22,8 +24,10 @@ C_SRCS += \
 OBJS += \
 ./Core/Src/Driver_tb67h450.o \
 ./Core/Src/Encoder_mt6701.o \
+./Core/Src/board_config.o \
 ./Core/Src/can.o \
 ./Core/Src/encoder_calib.o \
+./Core/Src/flash_calib.o \
 ./Core/Src/gpio.o \
 ./Core/Src/main.o \
 ./Core/Src/spi.o \
@@ -37,8 +41,10 @@ OBJS += \
 C_DEPS += \
 ./Core/Src/Driver_tb67h450.d \
 ./Core/Src/Encoder_mt6701.d \
+./Core/Src/board_config.d \
 ./Core/Src/can.d \
 ./Core/Src/encoder_calib.d \
+./Core/Src/flash_calib.d \
 ./Core/Src/gpio.d \
 ./Core/Src/main.d \
 ./Core/Src/spi.d \
@@ -57,7 +63,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/Driver_tb67h450.cyclo ./Core/Src/Driver_tb67h450.d ./Core/Src/Driver_tb67h450.o ./Core/Src/Driver_tb67h450.su ./Core/Src/Encoder_mt6701.cyclo ./Core/Src/Encoder_mt6701.d ./Core/Src/Encoder_mt6701.o ./Core/Src/Encoder_mt6701.su ./Core/Src/can.cyclo ./Core/Src/can.d ./Core/Src/can.o ./Core/Src/can.su ./Core/Src/encoder_calib.cyclo ./Core/Src/encoder_calib.d ./Core/Src/encoder_calib.o ./Core/Src/encoder_calib.su ./Core/Src/gpio.cyclo ./Core/Src/gpio.d ./Core/Src/gpio.o ./Core/Src/gpio.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/spi.cyclo ./Core/Src/spi.d ./Core/Src/spi.o ./Core/Src/spi.su ./Core/Src/stm32f1xx_hal_msp.cyclo ./Core/Src/stm32f1xx_hal_msp.d ./Core/Src/stm32f1xx_hal_msp.o ./Core/Src/stm32f1xx_hal_msp.su ./Core/Src/stm32f1xx_it.cyclo ./Core/Src/stm32f1xx_it.d ./Core/Src/stm32f1xx_it.o ./Core/Src/stm32f1xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f1xx.cyclo ./Core/Src/system_stm32f1xx.d ./Core/Src/system_stm32f1xx.o ./Core/Src/system_stm32f1xx.su ./Core/Src/tim.cyclo ./Core/Src/tim.d ./Core/Src/tim.o ./Core/Src/tim.su
+	-$(RM) ./Core/Src/Driver_tb67h450.cyclo ./Core/Src/Driver_tb67h450.d ./Core/Src/Driver_tb67h450.o ./Core/Src/Driver_tb67h450.su ./Core/Src/Encoder_mt6701.cyclo ./Core/Src/Encoder_mt6701.d ./Core/Src/Encoder_mt6701.o ./Core/Src/Encoder_mt6701.su ./Core/Src/board_config.cyclo ./Core/Src/board_config.d ./Core/Src/board_config.o ./Core/Src/board_config.su ./Core/Src/can.cyclo ./Core/Src/can.d ./Core/Src/can.o ./Core/Src/can.su ./Core/Src/encoder_calib.cyclo ./Core/Src/encoder_calib.d ./Core/Src/encoder_calib.o ./Core/Src/encoder_calib.su ./Core/Src/flash_calib.cyclo ./Core/Src/flash_calib.d ./Core/Src/flash_calib.o ./Core/Src/flash_calib.su ./Core/Src/gpio.cyclo ./Core/Src/gpio.d ./Core/Src/gpio.o ./Core/Src/gpio.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/spi.cyclo ./Core/Src/spi.d ./Core/Src/spi.o ./Core/Src/spi.su ./Core/Src/stm32f1xx_hal_msp.cyclo ./Core/Src/stm32f1xx_hal_msp.d ./Core/Src/stm32f1xx_hal_msp.o ./Core/Src/stm32f1xx_hal_msp.su ./Core/Src/stm32f1xx_it.cyclo ./Core/Src/stm32f1xx_it.d ./Core/Src/stm32f1xx_it.o ./Core/Src/stm32f1xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32f1xx.cyclo ./Core/Src/system_stm32f1xx.d ./Core/Src/system_stm32f1xx.o ./Core/Src/system_stm32f1xx.su ./Core/Src/tim.cyclo ./Core/Src/tim.d ./Core/Src/tim.o ./Core/Src/tim.su
 
 .PHONY: clean-Core-2f-Src
 

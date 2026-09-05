@@ -52,13 +52,24 @@ typedef enum
 } CalibState_t;
 
 /* -------------------------------------------------------------------------
- * Output: rectification lookup table (RAM)
- *   encoderCalibTable[raw_angle_14bit] = motor_subdivide_position
+ * Output: rectification lookup table (in flash, accessed via pointer)
+ *   calibTablePtr[raw_angle_14bit] = motor_subdivide_position
  * Total size: 16384 * 2 bytes = 32 KB
+ *
+ * The table lives in flash (APP_CALI).  Because F103CB has only 20 KB RAM,
+ * the 32 KB table cannot be mirrored in RAM.  Instead a pointer
+ * (calibTablePtr) points directly into flash memory-mapped space.
+ *
+ * During calibration, BuildCalibTable() writes to flash via FlashCalib_*.
+ * After calibration (or on boot from flash), calibTablePtr is set to
+ * APP_CALI_ADDR and reads are direct flash reads.
  * ------------------------------------------------------------------------- */
-extern uint16_t          encoderCalibTable[ENCODER_RESOLUTION];
+extern volatile uint16_t *calibTablePtr;
 extern volatile CalibError_t calibError;
 extern volatile CalibState_t calibState;
+
+/* True after a valid calibration table has been loaded from flash or built. */
+extern bool calibTableValid;
 
 /* -------------------------------------------------------------------------
  * Diagnostics (valid after a calibration attempt – inspect in debugger)
@@ -96,5 +107,23 @@ void Calib_TickMainLoop(void);
 
 /* Returns true while calibration is in progress (ISR must call Tick20kHz). */
 bool Calib_IsRunning(void);
+
+/* Read a single calibrated position from the table.
+ * Reads directly from flash via calibTablePtr. */
+uint16_t Calib_GetCalibratedAngleLUT(uint16_t rawAngle);
+
+/* Load calibration table from flash.
+ * Sets calibTablePtr to point at APP_CALI in flash.
+ * Returns true if valid data was found, false otherwise.
+ * Call once at startup before using Calib_GetCalibratedAngleLUT(). */
+bool Calib_LoadFromFlash(void);
+
+/* Save the calibration table to flash.
+ * Call after a successful calibration (calibState == CALIB_DONE,
+ * calibError == CALIB_ERR_NONE). */
+void Calib_SaveToFlash(void);
+
+/* Returns true if a valid calibration table is available (flash). */
+bool Calib_IsTableValid(void);
 
 #endif /* ENCODER_CALIB_H */

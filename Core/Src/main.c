@@ -31,6 +31,7 @@
 #include "Driver_tb67h450.h"
 #include "Encoder_mt6701.h"
 #include "encoder_calib.h"
+#include "board_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -79,7 +80,7 @@ volatile int32_t focCurrent = 0, focPosition = 0;
 volatile int32_t velocityIntegral = 0, trackVelocity = 0, goVelocity = 0;
 volatile int32_t velocityAcc      = 0;   /* acceleration step [subdivisions/s per tick] */
 volatile int32_t ratedVelocity    = 0;   /* maximum velocity  [subdivisions/s]           */
-uint16_t angleDataConverted = 0;
+uint16_t angleData_Calibrated = 0;
 
 /* Driver debug symbols – declared extern in Driver_tb67h450.c */
 int16_t SinMapValues_PhaseA_debug1 = 0, SinMapValues_PhaseB_debug1 = 0;
@@ -744,23 +745,23 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
         /* 1. Read encoder */
         angleData = GetAngle();
-        angleDataConverted = encoderCalibTable[angleData]; /* rectified position via calib table */
+        angleData_Calibrated = Calib_GetCalibratedAngleLUT(angleData); /* rectified position via calib table */
 
         /* 2. First-call initialisation – seed position tracking */
         static bool isFirstCalled = true;
         if (isFirstCalled)
         {
             isFirstCalled       = false;
-            realLapPosition     = (int32_t)angleDataConverted;
-            realLapPositionLast = (int32_t)angleDataConverted;
-            realPosition        = (int32_t)angleDataConverted;
-            realPositionLast    = (int32_t)angleDataConverted;
+            realLapPosition     = (int32_t)angleData_Calibrated;
+            realLapPositionLast = (int32_t)angleData_Calibrated;
+            realPosition        = (int32_t)angleData_Calibrated;
+            realPositionLast    = (int32_t)angleData_Calibrated;
             return;
         }
 
         /* 3. Update lap position with wrap-around handling */
         realLapPositionLast = realLapPosition;
-        realLapPosition     = (int32_t)angleDataConverted;
+        realLapPosition     = (int32_t)angleData_Calibrated;
 
         int32_t deltaLapPosition = realLapPosition - realLapPositionLast;
         if (deltaLapPosition >  (MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS >> 1))
@@ -938,27 +939,46 @@ int main(void)
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   HAL_TIM_Base_Start_IT(&htim3);
 
-  velocityAcc   = 50 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;  /* ramp step per tick 10/100/300/1000 */
-  velocityLimit = 8 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;   /* absolute cruise-speed ceiling (hard limit) */
-  ratedVelocity = velocityLimit;                          /* working max speed (may be overwritten by time-based moves) */
-  currentAcc    = 10 * RATED_CURRENT_MA;                 /* current ramp step [mA/s] */
+  /*---------- Load BoardConfig from flash ----------*/
+  if (!BoardConfig_Load())
+  {
+    /* No valid config in flash – write defaults */
+    BoardConfig_SetDefaults();
+  }
 
-  /* Start encoder calibration. encoderCalibTable[] will be ready in RAM
-   * once calibState == CALIB_DONE (checked in the main loop).            */
-  Calib_Start();
+  /* Apply boardConfig to runtime variables */
+  velocityAcc   = boardConfig.velocityAcc;
+  velocityLimit = boardConfig.velocityLimit;
+  ratedVelocity = velocityLimit;
+  currentAcc    = 10 * RATED_CURRENT_MA;
+
+  /* Start encoder calibration. calibTablePtr will point to flash
+   * once calibState == CALIB_DONE (checked in the main loop).
+   * If valid calibration data exists in flash, use it directly
+   * instead of re-running the calibration sequence. */
+  if (Calib_LoadFromFlash())
+  {
+    /* Calibration table loaded from flash – skip motor calibration */
+  }
+  else
+  {
+    /* No valid flash data – run full calibration sequence */
+    Calib_Start();
+  }
   goalVelocity = 410000;
   goalPosition = 5000;
   requestMode = MODE_COMMAND_POSITION;
 
-  pid.kp = 8;
-  pid.ki = 50;
-  pid.kd = 100;
+  /* Apply PID gains from boardConfig */
+  pid.kp = boardConfig.pid_kp;
+  pid.ki = boardConfig.pid_ki;
+  pid.kd = boardConfig.pid_kd;
 
-  /* Position-mode (DCE) controller gains */
-  dce.kp = 1000; // 1000 - 300
-  dce.kv = 200; // 200 - 200
-  dce.ki = 400; // 400 - 230
-  dce.kd = 200; // 200 - 350
+  /* Apply DCE gains from boardConfig */
+  dce.kp = boardConfig.dce_kp;
+  dce.kv = boardConfig.dce_kv;
+  dce.ki = boardConfig.dce_ki;
+  dce.kd = boardConfig.dce_kd;
 
   /* Position tracker: accel/decel step and locking-brake threshold */
   PosTracker_SetVelocityAcc(velocityAcc);
@@ -975,6 +995,23 @@ int main(void)
     /* USER CODE BEGIN 3 */
     /* Run calibration calculation (no-op after CALIB_DONE) */
     Calib_TickMainLoop();
+
+    /* Handle config write-back requests */
+    if (boardConfig.configStatus == CONFIG_COMMIT)
+    {
+      boardConfig.configStatus = CONFIG_OK;
+      BoardConfig_Save();
+    }
+    else if (boardConfig.configStatus == CONFIG_RESTORE)
+    {
+      if (BoardConfig_Load() == false) {BoardConfig_SetDefaults();}
+      HAL_NVIC_SystemReset();
+    }
+    else if (boardConfig.configStatus == CONFIG_DEFAULT)
+    {
+      BoardConfig_SetDefaults();
+      HAL_NVIC_SystemReset();
+    }
 
     /* Normal motion control starts once calibration is complete */
     

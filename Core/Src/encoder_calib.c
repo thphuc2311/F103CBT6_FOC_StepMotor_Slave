@@ -9,25 +9,30 @@
  *
  * Changes vs. original:
  *   - Ported to plain C
- *   - Calibration table stored in RAM (uint16_t encoderCalibTable[16384])
- *     instead of internal flash
+ *   - Calibration table stored in flash (32 KB at APP_CALI_ADDR).
+ *   - Accessed via pointer (calibTablePtr) — no RAM mirror, since
+ *     F103CB has only 20 KB RAM and the table is 32 KB.
+ *   - On boot, Calib_LoadFromFlash() points calibTablePtr at flash.
  *
  * How the table is used after calibration:
- *   uint16_t motorPos = encoderCalibTable[GetAngle()];
+ *   uint16_t motorPos = Calib_GetCalibratedAngleLUT(GetAngle());
  *   // motorPos is in [0, 51199] – use it as the encoder-corrected position
  */
 
 #include "encoder_calib.h"
 #include "Encoder_mt6701.h"
 #include "Driver_tb67h450.h"
+#include "flash_calib.h"
+#include "board_config.h"
 #include <stdlib.h>   /* abs() */
 
 /* ==========================================================================
  * Public state
  * ========================================================================== */
-uint16_t          encoderCalibTable[ENCODER_RESOLUTION];
+volatile uint16_t *calibTablePtr = (volatile uint16_t *)APP_CALI_ADDR;
 volatile CalibError_t calibError = CALIB_ERR_NONE;
 volatile CalibState_t calibState  = CALIB_IDLE;
+bool calibTableValid = false;
 
 /* ==========================================================================
  * Private state  (only written from ISR during their respective states,
@@ -194,6 +199,9 @@ static void BuildCalibTable(void)
     uint16_t dataU16;
     resultNum = 0U;
 
+    /* Begin flash write session: erase + unlock */
+    FlashCalib_BeginWrite();
+
     if (goDirection)
     {
         /* CW encoder direction */
@@ -216,7 +224,8 @@ static void BuildCalibTable(void)
                     (uint32_t)((int32_t)CALIB_SOFT_DIVIDE_NUM *  stepX
                              + (int32_t)CALIB_SOFT_DIVIDE_NUM *  stepY / dataI32),
                     CALIB_SUBDIVIDE_STEPS);
-                encoderCalibTable[resultNum++] = dataU16;
+                FlashCalib_Write16(dataU16);
+                resultNum++;
             }
         }
     }
@@ -242,10 +251,17 @@ static void BuildCalibTable(void)
                     (uint32_t)((int32_t)CALIB_SOFT_DIVIDE_NUM * (stepX + 1)
                              - (int32_t)CALIB_SOFT_DIVIDE_NUM *  stepY / dataI32),
                     CALIB_SUBDIVIDE_STEPS);
-                encoderCalibTable[resultNum++] = dataU16;
+                FlashCalib_Write16(dataU16);
+                resultNum++;
             }
         }
     }
+
+    /* Finalize flash write: lock */
+    FlashCalib_EndWrite();
+
+    /* Point calibTablePtr at the freshly written flash data */
+    calibTablePtr = (volatile uint16_t *)APP_CALI_ADDR;
 
     if (resultNum != (uint32_t)ENCODER_RESOLUTION)
         calibError = CALIB_ERR_QUANTITY;
@@ -257,8 +273,39 @@ static void BuildCalibTable(void)
 
 bool Calib_IsRunning(void)
 {
-    CalibState_t s = calibState;
-    return (s != CALIB_IDLE) && (s != CALIB_DONE);
+    return (calibState != CALIB_IDLE) && (calibState != CALIB_DONE);
+}
+
+uint16_t Calib_GetCalibratedAngleLUT(uint16_t rawAngle)
+{
+    return calibTablePtr[rawAngle];
+}
+
+bool Calib_LoadFromFlash(void)
+{
+    if (FlashCalib_IsValid())
+    {
+        calibTablePtr = (volatile uint16_t *)APP_CALI_ADDR;
+        calibTableValid = true;
+        calibState = CALIB_DONE;
+        return true;
+    }
+    return false;
+}
+
+void Calib_SaveToFlash(void)
+{
+    /* Table is already written to flash by BuildCalibTable().
+     * Set calibStatus and trigger main loop to write boardConfig to flash. */
+    boardConfig.calibStatus = true;
+    boardConfig.configStatus = CONFIG_COMMIT;
+    calibTablePtr = (volatile uint16_t *)APP_CALI_ADDR;
+    calibTableValid = true;
+}
+
+bool Calib_IsTableValid(void)
+{
+    return calibTableValid;
 }
 
 void Calib_Start(void)
@@ -422,6 +469,22 @@ void Calib_TickMainLoop(void)
 
     if (calibError == CALIB_ERR_NONE)
         BuildCalibTable();
+
+    /* Mark table as valid only if build succeeded, maybe CALIB_ERR_QUANTITY in BuildCalibTable()*/
+    if (calibError == CALIB_ERR_NONE)
+    {
+        calibTableValid = true;
+        boardConfig.calibStatus = true;
+    }
+    else
+    {
+        calibTableValid = false;
+        FlashCalib_ClearTable();
+        boardConfig.calibStatus = false;
+    }
+
+    /* Trigger main loop to write boardConfig (including calibStatus) to flash */
+    boardConfig.configStatus = CONFIG_COMMIT;
 
     calibState = CALIB_DONE;
 }

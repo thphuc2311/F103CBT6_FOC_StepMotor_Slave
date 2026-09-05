@@ -41,11 +41,17 @@ _estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
 
-/* Memories definition */
+/* Memories definition
+ *
+ * Flash layout (128 KB total, 1 KB pages):
+ *   0x08000000 - 0x08017BFF   APP_FIRMWARE   (95 KB)  ← linker FLASH region
+ *   0x08017C00 - 0x0801FBFF   APP_CALI       (32 KB)  ← calibration table
+ *   0x0801FC00 - 0x0801FFFF   APP_DATA       ( 1 KB)  ← runtime config
+ */
 MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 20K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 128K
+  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 95K
 }
 
 /* Sections */
