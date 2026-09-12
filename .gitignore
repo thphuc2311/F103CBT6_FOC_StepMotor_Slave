@@ -1,0 +1,10 @@
+# Bỏ qua toàn bộ thư mục Debug của STM32CubeIDE
+Debug/
+debug/
+
+# Nếu sau này bạn build ở chế độ Release, bỏ qua luôn thư mục Release
+Release/
+release/
+
+# Bỏ qua các file cấu hình Debug cá nhân (chứa mã số mạch ST-Link của riêng máy bạn)
+*.launch

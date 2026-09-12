@@ -20,7 +20,9 @@ static uint32_t writeAddress = 0U;
 /* Internal helpers                                                          */
 /* ------------------------------------------------------------------------- */
 
-/* Erase a single flash page at the given address. */
+/* Erase a single flash page at the given address.
+ * HAL_FLASHEx_Erase already waits for completion and clears PER bit,
+ * so no extra FLASH_WaitForLastOperation / CLEAR_BIT needed. */
 static void FlashCalib_ErasePage(uint32_t addr)
 {
     FLASH_EraseInitTypeDef eraseInit;
@@ -31,8 +33,6 @@ static void FlashCalib_ErasePage(uint32_t addr)
     eraseInit.NbPages      = 1U;
 
     HAL_FLASHEx_Erase(&eraseInit, &pageError);
-    FLASH_WaitForLastOperation(HAL_MAX_DELAY);
-    CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
 }
 
 /* Erase all pages covering [addr, addr + size). */
@@ -134,11 +134,17 @@ void FlashUserData_Write(const void *data, uint32_t size)
     /* 2. Modify the desired region in RAM buffer (offset 0) */
     memcpy(pageBuffer, data, size);
 
-    /* 3. Erase flash page */
+    /* 3. Disable interrupts – flash erase/program stalls the CPU bus.
+    *    A 20 kHz TIM3 ISR firing during flash operations can cause
+    *    a HardFault or leave the flash controller in an inconsistent
+    *    state.  Critical section covers erase + program. */
+    __disable_irq();
+
+    /* 4. Erase flash page */
     HAL_FLASH_Unlock();
     FlashCalib_EraseRange(APP_DATA_ADDR, APP_DATA_SIZE);
 
-    /* 4. Program entire buffer back to flash (half-word writes) */
+    /* 5. Program entire buffer back to flash (half-word writes) */
     for (uint32_t i = 0U; i < CALIB_FLASH_PAGE_SIZE; i += 2U)
     {
         uint16_t halfWord = (uint16_t)pageBuffer[i] | ((uint16_t)pageBuffer[i + 1U] << 8);
@@ -147,4 +153,7 @@ void FlashUserData_Write(const void *data, uint32_t size)
     }
 
     HAL_FLASH_Lock();
+
+    /* 6. Re-enable interrupts */
+    __enable_irq();
 }
