@@ -16,14 +16,14 @@ static void DacOutputVoltage(uint16_t _voltageA_3300mVIn12bits, uint16_t _voltag
 
 static void SetInputA(bool _statusA_plus, bool _statusA_minus)
 {
-	_statusA_plus 	? (Output_Ap_GPIO_Port->BSRR = Output_Ap_Pin) : (Output_Ap_GPIO_Port->BSRR = (uint32_t)Output_Ap_Pin << 16U); //PC6
-	_statusA_minus 	? (Output_Am_GPIO_Port->BSRR = Output_Am_Pin) : (Output_Am_GPIO_Port->BSRR = (uint32_t)Output_Am_Pin << 16U); //PC7
+	_statusA_plus 	? (Output_Ap_GPIO_Port->BSRR = Output_Ap_Pin) : (Output_Ap_GPIO_Port->BSRR = (uint32_t)Output_Ap_Pin << 16U); //PB12
+	_statusA_minus 	? (Output_Am_GPIO_Port->BSRR = Output_Am_Pin) : (Output_Am_GPIO_Port->BSRR = (uint32_t)Output_Am_Pin << 16U); //PB13
 }
 
 static void SetInputB(bool _statusB_plus, bool _statusB_minus)
 {
-	_statusB_plus 	? (Output_Bp_GPIO_Port->BSRR = Output_Bp_Pin) : (Output_Bp_GPIO_Port->BSRR = (uint32_t)Output_Bp_Pin << 16U); //PC8
-	_statusB_minus 	? (Output_Bm_GPIO_Port->BSRR = Output_Bm_Pin) : (Output_Bm_GPIO_Port->BSRR = (uint32_t)Output_Bm_Pin << 16U); //PC9
+	_statusB_plus 	? (Output_Bp_GPIO_Port->BSRR = Output_Bp_Pin) : (Output_Bp_GPIO_Port->BSRR = (uint32_t)Output_Bp_Pin << 16U); //PB14
+	_statusB_minus 	? (Output_Bm_GPIO_Port->BSRR = Output_Bm_Pin) : (Output_Bm_GPIO_Port->BSRR = (uint32_t)Output_Bm_Pin << 16U); //PB15
 }
 
 void SetFocCurrentVector(uint32_t _directionInCount, int32_t _current_mA)

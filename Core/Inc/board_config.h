@@ -35,10 +35,11 @@ typedef enum
 
 /* ------------------------------------------------------------------------- */
 /* Board configuration structure                                             */
- *                                                                         *
- * Stored at APP_DATA_ADDR in flash.                                      *
- * Total size must fit within APP_DATA (1 KB).                              *
- * ------------------------------------------------------------------------- */
+
+/*                                                                         *
+ * Stored at APP_DATA_ADDR in flash.                                       *
+ * Total size must fit within APP_DATA (1 KB).                             *
+ * ----------------------------------------------------------------------- */
 typedef struct
 {
     ConfigStatus_t configStatus;     /* write-back trigger flag             */

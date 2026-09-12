@@ -145,16 +145,6 @@ volatile int32_t posVelocityIntegral   = 0, posTrackVelocity = 0;
 volatile int32_t posPositionIntegral   = 0, posTrackPosition = 0;
 volatile int32_t posGoLocation         = 0, posGoVelocity    = 0;
 
-/* Define CAN header for TxCAN */
-//CAN_TxHeaderTypeDef txHeader =
-//{
-//	.StdId = 0x01,
-//	.ExtId = 0x00,
-//	.IDE = CAN_ID_STD,
-//	.RTR = CAN_RTR_DATA,
-//	.DLC = 8,
-//	.TransmitGlobalTime = DISABLE
-//};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -935,11 +925,11 @@ int main(void)
   MX_TIM3_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   HAL_TIM_Base_Start_IT(&htim3);
 
-  /*---------- Load BoardConfig from flash ----------*/
+//  /*---------- Load BoardConfig from flash ----------*/
   if (!BoardConfig_Load())
   {
     /* No valid config in flash – write defaults */
@@ -965,9 +955,9 @@ int main(void)
     /* No valid flash data – run full calibration sequence */
     Calib_Start();
   }
-  goalVelocity = 410000;
-  goalPosition = 5000;
-  requestMode = MODE_COMMAND_POSITION;
+//  goalVelocity = 410000;
+//  goalPosition = 5000;
+//  requestMode = MODE_COMMAND_POSITION;
 
   /* Apply PID gains from boardConfig */
   pid.kp = boardConfig.pid_kp;
@@ -1001,6 +991,8 @@ int main(void)
     {
       boardConfig.configStatus = CONFIG_OK;
       BoardConfig_Save();
+      HAL_Delay(10);
+      HAL_NVIC_SystemReset();
     }
     else if (boardConfig.configStatus == CONFIG_RESTORE)
     {

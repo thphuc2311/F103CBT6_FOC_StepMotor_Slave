@@ -6,6 +6,7 @@
 
 #include "board_config.h"
 #include "flash_calib.h"
+#include "can.h"
 #include "main.h"
 
 /* ------------------------------------------------------------------------- */
@@ -42,7 +43,7 @@ void BoardConfig_SetDefaults(void)
     boardConfig.configStatus       = CONFIG_OK;
     boardConfig.canNodeId          = ThisCAN_NodeId;
     boardConfig.encoderHomeOffset  = 0;
-    boardConfig.defaultMode        = MODE_COMMAND_VELOCITY;    /* MODE_COMMAND_VELOCITY */
+    boardConfig.defaultMode        = MODE_COMMAND_POSITION;    /* MODE_COMMAND_POSITION */
     boardConfig.currentLimit       = 1 * 1000;   /* mA */
     boardConfig.velocityLimit      = 8 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;      /* set by main() */
     boardConfig.velocityAcc        = 50 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;      /* set by main() */
