@@ -45,7 +45,6 @@ extern CAN_HandleTypeDef hcan;
 
 #define ThisCAN_NodeId 			2u
 #define TargetCAN_NodeId 		1u
-#define Ack_Code				0x7F
 
 /* USER CODE END Private defines */
 

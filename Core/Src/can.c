@@ -61,6 +61,36 @@ void MX_CAN_Init(void)
   }
   /* USER CODE BEGIN CAN_Init 2 */
 
+  CAN_FilterTypeDef sFilterConfig;
+  //filter one (stack light blink)
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = 0x0000;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = 0x0000;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
+  if (HAL_CAN_ConfigFilter(&hcan, &sFilterConfig) != HAL_OK)
+  {
+	  /* Filter configuration Error */
+	  Error_Handler();
+  }
+
+  HAL_CAN_Start(&hcan); //start CAN
+
+  HAL_CAN_ActivateNotification(&hcan,CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO1_MSG_PENDING);
+
+/* Configure Transmission process */
+  TxHeader.StdId = ThisCAN_NodeId;
+  TxHeader.ExtId = 0x00;
+  TxHeader.RTR = CAN_RTR_DATA;
+  TxHeader.IDE = CAN_ID_STD;
+  TxHeader.DLC = 8;
+  TxHeader.TransmitGlobalTime = DISABLE;
+
   /* USER CODE END CAN_Init 2 */
 
 }
@@ -195,7 +225,7 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
 			memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
 
 			TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
-			TxHeader.StdId = (TargetCAN_NodeId << 7) | Ack_Code;
+			TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
 			CAN_Send(&TxHeader, TxData);
 		}
 		break;
@@ -213,6 +243,26 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
 			(int32_t) (tmpV * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS),
 			(float) tmpTime
 		);
+		break;
+
+    	case 0x07:
+		if (runningMode != MODE_COMMAND_POSITION)
+		{
+			requestMode = MODE_COMMAND_POSITION;
+		}
+		// Set VelocityLimit
+		memcpy(&ratedVelocity, _data + 4, sizeof(ratedVelocity));
+		// Set SetPositionSetPoint
+		int32_t tempPosition = 0;
+		memcpy(&tempPosition, _data, sizeof(tempPosition));
+		SetPositionSetPoint(tempPosition);
+
+		// Sending current position to master
+		int32_t TxCanBuf = GetPosition();
+		memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+		TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+		TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
+		CAN_Send(&TxHeader, TxData);
 		break;
 
     	default:
