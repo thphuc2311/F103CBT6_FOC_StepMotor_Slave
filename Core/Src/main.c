@@ -44,7 +44,6 @@
 #define MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS  51200   /* 100 steps x 256 micro-steps (must match CALIB_SUBDIVIDE_STEPS) */
 #define CONTROL_FREQUENCY                 20000   /* Hz – must match TIM5 reload period */
 #define SOFT_DIVIDE_NUM                   256     /* quarter-circle offset for 90-deg FOC lead */
-#define RATED_CURRENT_MA                  1500    /* mA – peak winding current limit */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -71,7 +70,6 @@ volatile int32_t estLeadPosition = 0, estPosition = 0;
 /* Control set-points */
 volatile int32_t goalVelocity = 0;   /* desired velocity [subdivisions/s], set from main loop */
 volatile int32_t softVelocity = 0;   /* ramped velocity fed to PID */
-int32_t          UserReq_Vel = 0;    /* User request Goal Velocity via Debugger */
 
 /* FOC output */
 volatile int32_t focCurrent = 0, focPosition = 0;
@@ -86,12 +84,10 @@ uint16_t angleData_Calibrated = 0;
 int16_t SinMapValues_PhaseA_debug1 = 0, SinMapValues_PhaseB_debug1 = 0;
 int16_t SinMapValues_PhaseA_debug2 = 0, SinMapValues_PhaseB_debug2 = 0;
 
-int32_t a,b;
-
 /* PID controller state (velocity loop) */
 typedef struct
 {
-    int32_t kp, ki, kd;
+    int16_t kp, ki, kd;
     int32_t vError, vErrorLast;
     int32_t outputKp, outputKi, outputKd;
     int32_t integralRound, integralRemainder;
@@ -100,16 +96,7 @@ typedef struct
 
 volatile PID_t pid;
 
-/* DCE controller state (position loop) */
-typedef struct
-{
-    int32_t kp, kv, ki, kd;
-    int32_t pError, vError;
-    int32_t outputKp, outputKi, outputKd;
-    int32_t integralRound, integralRemainder;
-    int32_t output;
-} DCE_t;
-
+/* DCE controller state (position loop) – typedef in main.h */
 volatile DCE_t dce;
 
 volatile Mode_t requestMode  = MODE_COMMAND_VELOCITY;   /* set from main loop  */
@@ -120,22 +107,19 @@ volatile bool   softNewCurve = false;                   /* seed tracker on mode 
 /* Position set-points */
 volatile int32_t goalPosition = 0;   /* desired position [subdivisions], set from main loop */
 volatile int32_t softPosition = 0;   /* ramped position fed to DCE                          */
-int32_t 	UserReq_Pos 	= 51200; /* User request Goal Position via Debugger */
-float 		UserReq_Time 	= 1.0f;  /* User request Goal Time to Position via Debugger */
 
 /* Current set-points (MODE_COMMAND_CURRENT) */
 volatile int32_t goalCurrent = 0;    /* desired current [mA], set from main loop            */
 volatile int32_t softCurrent = 0;    /* ramped current fed to FOC                           */
-int32_t 		 UserReq_Cur = 0;	 /* User request Goal Current via Debugger*/
 
 /* Current motion-planner state (current ramp) */
 volatile int32_t currentIntegral = 0, trackCurrent = 0, goCurrent = 0;
 volatile int32_t currentAcc      = 0;   /* current ramp step [mA/s]                          */
 volatile int32_t ratedCurrentAcc = 1 * 1000;     /* (mA/s) */
+volatile int32_t ratedCurrent    = 1 * 1000;     /* (mA)   */
 
-/* Motion limits / home reference */
+/* Home reference */
 volatile int32_t encoderHomeOffset = 0;   /* zero-position offset [subdivisions]             */
-volatile int32_t velocityLimit     = 0;   /* absolute max cruise velocity [subdivisions/s]   */
 
 /* Position motion-planner state (trapezoidal position tracker) */
 volatile int32_t posVelocityUpAcc      = 0, posVelocityDownAcc = 0;
@@ -161,12 +145,22 @@ int32_t GetPosition ()
 	return (realPosition - encoderHomeOffset);
 }
 
+float GetVelocity ()
+{
+	return (float) estVelocity / (float) MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;
+}
+
+int32_t GetFocCurrent ()
+{
+	return focCurrent;
+}
+
 /*
- * CalcVelocityIntegral
+ * VelocityTracker_CalcVelocityIntegral
  * Integrates _velocity into trackVelocity using a sub-step accumulator so
  * fractional increments are preserved at 20 kHz.
  */
-static void CalcVelocityIntegral(int32_t _velocity)
+static void VelocityTracker_CalcVelocityIntegral(int32_t _velocity)
 {
     velocityIntegral += _velocity;
     trackVelocity    += velocityIntegral / CONTROL_FREQUENCY;
@@ -174,11 +168,11 @@ static void CalcVelocityIntegral(int32_t _velocity)
 }
 
 /*
- * CalcSoftGoal  (velocity ramp generator – MODE_PWM_VELOCITY)
+ * VelocityTracker_CalcSoftGoal  (velocity ramp generator – MODE_COMMAND_VELOCITY)
  * Smoothly accelerates / decelerates trackVelocity toward _goalVelocity
  * using the configured velocityAcc step.
  */
-static void CalcSoftGoal(int32_t _goalVelocity)
+static void VelocityTracker_CalcSoftGoal(int32_t _goalVelocity)
 {
     int32_t deltaVelocity = _goalVelocity - trackVelocity;
 
@@ -190,7 +184,7 @@ static void CalcSoftGoal(int32_t _goalVelocity)
     {
         if (trackVelocity >= 0)
         {
-            CalcVelocityIntegral(velocityAcc);
+            VelocityTracker_CalcVelocityIntegral(velocityAcc);
             if (trackVelocity >= _goalVelocity)
             {
                 velocityIntegral = 0;
@@ -199,7 +193,7 @@ static void CalcSoftGoal(int32_t _goalVelocity)
         }
         else
         {
-            CalcVelocityIntegral(velocityAcc);
+            VelocityTracker_CalcVelocityIntegral(velocityAcc);
             if (trackVelocity >= 0)
             {
                 velocityIntegral = 0;
@@ -211,7 +205,7 @@ static void CalcSoftGoal(int32_t _goalVelocity)
     {
         if (trackVelocity <= 0)
         {
-            CalcVelocityIntegral(-velocityAcc);
+            VelocityTracker_CalcVelocityIntegral(-velocityAcc);
             if (trackVelocity <= _goalVelocity)
             {
                 velocityIntegral = 0;
@@ -220,7 +214,7 @@ static void CalcSoftGoal(int32_t _goalVelocity)
         }
         else
         {
-            CalcVelocityIntegral(-velocityAcc);
+            VelocityTracker_CalcVelocityIntegral(-velocityAcc);
             if (trackVelocity <= 0)
             {
                 velocityIntegral = 0;
@@ -378,8 +372,8 @@ static void CurrentTracker_CalcSoftGoal(int32_t _goalCurrent)
  */
 void SetCurrentSetPoint(int32_t _cur)
 {
-    if      (_cur >  RATED_CURRENT_MA) goalCurrent =  RATED_CURRENT_MA;
-    else if (_cur < -RATED_CURRENT_MA) goalCurrent = -RATED_CURRENT_MA;
+    if      (_cur >  ratedCurrent) goalCurrent =  ratedCurrent;
+    else if (_cur < -ratedCurrent) goalCurrent = -ratedCurrent;
     else                               goalCurrent = _cur;
 }
 
@@ -410,7 +404,7 @@ void SetPositionSetPoint(int32_t _pos)
  * Sets a target position to be reached in approximately _time seconds by
  * computing the cruise velocity of a trapezoidal profile with the configured
  * acceleration (velocityAcc). If the move cannot complete within _time at the
- * velocity limit, it clamps to velocityLimit and returns false; otherwise it
+ * velocity limit, it clamps to boardConfig.velocityLimit and returns false; otherwise it
  * derives the required cruise velocity and returns true.
  * Direct port of Controller::SetPositionSetPointWithTime().
  */
@@ -424,7 +418,7 @@ bool SetPositionSetPointWithTime(int32_t _pos, float _time)
     if ((float)deltaPos > pMax)
     {
         /* Not reachable in time: run at the velocity limit. */
-        ratedVelocity = velocityLimit;
+        ratedVelocity = boardConfig.velocityLimit;
         SetPositionSetPoint(_pos);
         return false;
     }
@@ -461,14 +455,14 @@ static void CalcPidToOutput(int32_t _speed)
     pid.integralRemainder = pid.integralRound >> 10;
     pid.integralRound    -= (pid.integralRemainder << 10);
     pid.outputKi         += pid.integralRemainder;
-    if (pid.outputKi >  (RATED_CURRENT_MA << 10)) pid.outputKi =  (RATED_CURRENT_MA << 10);
-    if (pid.outputKi < -(RATED_CURRENT_MA << 10)) pid.outputKi = -(RATED_CURRENT_MA << 10);
+    if (pid.outputKi >  (ratedCurrent << 10)) pid.outputKi =  (ratedCurrent << 10);
+    if (pid.outputKi < -(ratedCurrent << 10)) pid.outputKi = -(ratedCurrent << 10);
 
     pid.outputKd = pid.kd * (pid.vError - pid.vErrorLast);
 
     pid.output = (pid.outputKp + pid.outputKi + pid.outputKd) >> 10;
-    if (pid.output >  RATED_CURRENT_MA) pid.output =  RATED_CURRENT_MA;
-    if (pid.output < -RATED_CURRENT_MA) pid.output = -RATED_CURRENT_MA;
+    if (pid.output >  ratedCurrent) pid.output =  ratedCurrent;
+    if (pid.output < -ratedCurrent) pid.output = -ratedCurrent;
 
     CalcCurrentToOutput(pid.output);
 }
@@ -495,14 +489,14 @@ static void CalcDceToOutput(int32_t _location, int32_t _speed)
     dce.integralRemainder = dce.integralRound >> 7;
     dce.integralRound    -= (dce.integralRemainder << 7);
     dce.outputKi         += dce.integralRemainder;
-    if (dce.outputKi >  (RATED_CURRENT_MA << 10)) dce.outputKi =  (RATED_CURRENT_MA << 10);
-    if (dce.outputKi < -(RATED_CURRENT_MA << 10)) dce.outputKi = -(RATED_CURRENT_MA << 10);
+    if (dce.outputKi >  (ratedCurrent << 10)) dce.outputKi =  (ratedCurrent << 10);
+    if (dce.outputKi < -(ratedCurrent << 10)) dce.outputKi = -(ratedCurrent << 10);
 
     dce.outputKd = dce.kd * dce.vError;
 
     dce.output = (dce.outputKp + dce.outputKi + dce.outputKd) >> 10;
-    if (dce.output >  RATED_CURRENT_MA) dce.output =  RATED_CURRENT_MA;
-    if (dce.output < -RATED_CURRENT_MA) dce.output = -RATED_CURRENT_MA;
+    if (dce.output >  ratedCurrent) dce.output =  ratedCurrent;
+    if (dce.output < -ratedCurrent) dce.output = -ratedCurrent;
 
     CalcCurrentToOutput(dce.output);
 }
@@ -828,7 +822,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                 int32_t clampedVel = goalVelocity;
                 if (clampedVel >  ratedVelocity) clampedVel =  ratedVelocity; // Remove clamping later, claper alreary clamp in SetVelocitySetPoint
                 if (clampedVel < -ratedVelocity) clampedVel = -ratedVelocity;
-                CalcSoftGoal(clampedVel);
+                VelocityTracker_CalcSoftGoal(clampedVel);
                 softVelocity = goVelocity;
                 break;
             }
@@ -840,8 +834,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             case MODE_COMMAND_CURRENT:
             {
                 int32_t clampedCur = goalCurrent;
-                if (clampedCur >  RATED_CURRENT_MA) clampedCur =  RATED_CURRENT_MA; // Remove clamping later, claper alreary clamp in SetCurrentSetPoint
-                if (clampedCur < -RATED_CURRENT_MA) clampedCur = -RATED_CURRENT_MA;
+                if (clampedCur >  ratedCurrent) clampedCur =  ratedCurrent; // Remove clamping later, claper alreary clamp in SetCurrentSetPoint
+                if (clampedCur < -ratedCurrent) clampedCur = -ratedCurrent;
                 CurrentTracker_CalcSoftGoal(clampedCur);
                 softCurrent = goCurrent;
                 break;
@@ -936,11 +930,21 @@ int main(void)
     BoardConfig_SetDefaults();
   }
 
-  /* Apply boardConfig to runtime variables */
+  /* Apply rated parameter (limit) */
   velocityAcc   = boardConfig.velocityAcc;
-  velocityLimit = boardConfig.velocityLimit;
-  ratedVelocity = velocityLimit;
-  currentAcc    = 10 * RATED_CURRENT_MA;
+  ratedCurrent = boardConfig.currentLimit;
+  ratedVelocity = boardConfig.velocityLimit;
+  
+  /* Apply PID gains from boardConfig */
+  pid.kp = boardConfig.pid_kp;
+  pid.ki = boardConfig.pid_ki;
+  pid.kd = boardConfig.pid_kd;
+
+  /* Apply DCE gains from boardConfig */
+  dce.kp = boardConfig.dce_kp;
+  dce.kv = boardConfig.dce_kv;
+  dce.ki = boardConfig.dce_ki;
+  dce.kd = boardConfig.dce_kd;
 
   /* Start encoder calibration. calibTablePtr will point to flash
    * once calibState == CALIB_DONE (checked in the main loop).
@@ -953,22 +957,8 @@ int main(void)
   else
   {
     /* No valid flash data – run full calibration sequence */
-    Calib_Start();
+    calibState = CALIB_START;
   }
-//  goalVelocity = 410000;
-//  goalPosition = 5000;
-//  requestMode = MODE_COMMAND_POSITION;
-
-  /* Apply PID gains from boardConfig */
-  pid.kp = boardConfig.pid_kp;
-  pid.ki = boardConfig.pid_ki;
-  pid.kd = boardConfig.pid_kd;
-
-  /* Apply DCE gains from boardConfig */
-  dce.kp = boardConfig.dce_kp;
-  dce.kv = boardConfig.dce_kv;
-  dce.ki = boardConfig.dce_ki;
-  dce.kd = boardConfig.dce_kd;
 
   /* Position tracker: accel/decel step and locking-brake threshold */
   PosTracker_SetVelocityAcc(velocityAcc);
@@ -994,12 +984,12 @@ int main(void)
       HAL_Delay(10);
       HAL_NVIC_SystemReset();
     }
-    else if (boardConfig.configStatus == CONFIG_RESTORE)
+    else if (boardConfig.configStatus == CONFIG_RESTORE) // Retore the flash config - which wasn't saved to flash yet (Not yet CONFIG_COMMIT)
     {
       if (BoardConfig_Load() == false) {BoardConfig_SetDefaults();}
       HAL_NVIC_SystemReset();
     }
-    else if (boardConfig.configStatus == CONFIG_DEFAULT)
+    else if (boardConfig.configStatus == CONFIG_DEFAULT) // Force write the default config to flash.
     {
       BoardConfig_SetDefaults();
       HAL_NVIC_SystemReset();

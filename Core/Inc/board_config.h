@@ -50,9 +50,9 @@ typedef struct
     int32_t        velocityLimit;    /* max velocity [subdivisions/s]       */
     int32_t        velocityAcc;      /* acceleration [subdivisions/s per tick] */
     int32_t        calibrationCurrent;/* calibration drive current [mA]     */
-    int32_t        pid_kp;           /* velocity PID proportional gain      */
-    int32_t        pid_ki;           /* velocity PID integral gain          */
-    int32_t        pid_kd;           /* velocity PID derivative gain        */
+    int16_t        pid_kp;           /* velocity PID proportional gain      */
+    int16_t        pid_ki;           /* velocity PID integral gain          */
+    int16_t        pid_kd;           /* velocity PID derivative gain        */
     int32_t        dce_kp;           /* position DCE proportional gain      */
     int32_t        dce_kv;           /* position DCE velocity gain          */
     int32_t        dce_ki;           /* position DCE integral gain          */

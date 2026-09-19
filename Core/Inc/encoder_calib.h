@@ -14,7 +14,6 @@
 #define CALIB_SAMPLE_PER_STEP   16U      /* encoder samples averaged per step   */
 #define CALIB_AUTO_SPEED        2U       /* subdivisions/tick during prepare    */
 #define CALIB_FINE_SPEED        1U       /* subdivisions/tick during measure    */
-#define CALIB_CURRENT_MA        1500     /* drive current during calibration    */
 
 /*
  * Tick prescaler: the 20 kHz ISR calls Calib_Tick20kHz() every interrupt, but
@@ -41,7 +40,7 @@ typedef enum
 
 typedef enum
 {
-    CALIB_IDLE = 0,
+    CALIB_START = 0,
     CALIB_FWD_PREPARE,       /* one full CW revolution to lock rotor           */
     CALIB_FWD_MEASURE,       /* CW scan: sample encoder at every hard step     */
     CALIB_BWD_RETURN,        /* overshoot past start to eliminate backlash     */
@@ -70,23 +69,6 @@ extern volatile CalibState_t calibState;
 
 /* True after a valid calibration table has been loaded from flash or built. */
 extern bool calibTableValid;
-
-/* -------------------------------------------------------------------------
- * Diagnostics (valid after a calibration attempt – inspect in debugger)
- *   Ideal per-hard-step encoder delta = ENCODER_RESOLUTION / CALIB_HARD_STEPS
- *                                      = 16384 / 200 ~= 82 counts.
- *   If calibDbgFailDelta is far from ~82, the step-angle / encoder scale
- *   (CALIB_HARD_STEPS) or the wiring is wrong:
- *     ~82  -> correct (1.8 deg, 200-step motor)
- *     ~41  -> motor is 0.9 deg (400-step): set CALIB_HARD_STEPS = 400
- *     ~0   -> motor not moving: raise CALIB_CURRENT_MA / check wiring
- * ------------------------------------------------------------------------- */
-extern volatile int32_t calibDbgMinDelta;   /* smallest |delta| seen           */
-extern volatile int32_t calibDbgMaxDelta;   /* largest  |delta| seen           */
-extern volatile int32_t calibDbgFailIndex;  /* hard-step index that failed (-1) */
-extern volatile int32_t calibDbgFailDelta;  /* signed delta at failing step     */
-extern volatile int32_t calibDbgFailCount;  /* number of out-of-band steps       */
-extern volatile int32_t calibDbgSumDelta;   /* sum of signed deltas over 1 rev   */
 
 /* Raw averaged forward-pass samples (encoder counts at each hard step).     */
 /* Watch this array in the debugger to see the actual angle progression.     */

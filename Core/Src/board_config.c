@@ -47,7 +47,7 @@ void BoardConfig_SetDefaults(void)
     boardConfig.currentLimit       = 1 * 1000;   /* mA */
     boardConfig.velocityLimit      = 8 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;      /* set by main() */
     boardConfig.velocityAcc        = 50 * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;      /* set by main() */
-    boardConfig.calibrationCurrent = 1500;   /* mA */
+    boardConfig.calibrationCurrent = 2000;   /* mA */
     boardConfig.pid_kp             = 8;
     boardConfig.pid_ki             = 50;
     boardConfig.pid_kd             = 100;

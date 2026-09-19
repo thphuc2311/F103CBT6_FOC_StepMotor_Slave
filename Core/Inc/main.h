@@ -59,7 +59,21 @@ extern volatile Mode_t runningMode;
 extern volatile State_t StepperState;
 
 extern volatile int32_t ratedVelocity;
-extern volatile int32_t velocityLimit;
+extern volatile int32_t velocityAcc;
+extern volatile int32_t encoderHomeOffset;
+extern volatile int32_t ratedCurrent;
+
+/* DCE controller (position loop) – defined in main.c */
+typedef struct
+{
+    int32_t kp, kv, ki, kd;
+    int32_t pError, vError;
+    int32_t outputKp, outputKi, outputKd;
+    int32_t integralRound, integralRemainder;
+    int32_t output;
+} DCE_t;
+
+extern volatile DCE_t dce;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -80,6 +94,8 @@ extern void SetVelocitySetPoint(int32_t _vel);
 extern void SetCurrentSetPoint(int32_t _cur);
 
 extern int32_t GetPosition();
+extern int32_t GetFocCurrent();
+extern float  GetVelocity();
 extern void SetPositionSetPoint(int32_t _pos);
 
 extern bool SetPositionSetPointWithTime(int32_t _pos, float _time);
@@ -107,7 +123,6 @@ extern bool SetPositionSetPointWithTime(int32_t _pos, float _time);
 #define MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS  51200   /* 100 steps x 256 micro-steps (must match CALIB_SUBDIVIDE_STEPS) */
 #define CONTROL_FREQUENCY                 20000   /* Hz – must match TIM5 reload period */
 #define SOFT_DIVIDE_NUM                   256     /* quarter-circle offset for 90-deg FOC lead */
-#define RATED_CURRENT_MA                  1500    /* mA – peak winding current limit */
 
 /* USER CODE END Private defines */
 

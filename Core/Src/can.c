@@ -19,7 +19,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "can.h"
-
+#include "board_config.h"
+#include "encoder_calib.h"
 /* USER CODE BEGIN 0 */
 
 CAN_TxHeaderTypeDef TxHeader;
@@ -195,75 +196,205 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
     switch (_cmd)
     {
     	case 0x01:
-    		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-		break;
+    	  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+      break;
 
-    	case 0x04:  // Set Velocity SetPoint
-		if (runningMode != MODE_COMMAND_VELOCITY)
-		{
-			requestMode = MODE_COMMAND_VELOCITY;
-		}
-		memcpy(&tmpV, _data, sizeof(tmpV));
-		SetVelocitySetPoint((int32_t)
-				tmpV * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS
-				);
-		break;
+      case 0x02: // Do Calibration
+    	  calibState = CALIB_START;
+        if (_data[4] == 1) // Ack Calibration Done
+        {
+          txHeader.StdId = (TargetCAN_NodeId << 7) | 0x02; // 0x02 is Do Calibration
+          TxData[0] = calibState == CALIB_DONE ? 1u : 0u;
+          CAN_Send(&txHeader, TxData);
+        }
+      break;
 
-    	case 0x05:  // Set Position SetPoint
-		if (runningMode != MODE_COMMAND_POSITION)
-		{
-			ratedVelocity = velocityLimit;
-			requestMode = MODE_COMMAND_POSITION;
-		}
-		memcpy(&tmpV, _data, sizeof(tmpV));
-		SetPositionSetPoint( (int32_t)
-				tmpV * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS
-				);
-		if (_data[4] == 1) // Need Position & Finished ACK
-		{
-			int32_t TxCanBuf = GetPosition();
-			memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+      case 0x03: // Set Current SetPoint
+        if (runningMode != MODE_COMMAND_CURRENT)
+        {
+          requestMode = MODE_COMMAND_CURRENT;
+        }
+        memcpy(&tmpV, _data, sizeof(int32_t));
+        SetCurrentSetPoint(tmpV);
+      break;
 
-			TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
-			TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
-			CAN_Send(&TxHeader, TxData);
-		}
-		break;
+      case 0x04:  // Set Velocity SetPoint
+        if (runningMode != MODE_COMMAND_VELOCITY)
+        {
+          requestMode = MODE_COMMAND_VELOCITY;
+        }
+        memcpy(&tmpV, _data, sizeof(tmpV));
+        SetVelocitySetPoint(tmpV);
+      break;
+
+      case 0x05:  // Set Position SetPoint
+        if (runningMode != MODE_COMMAND_POSITION)
+        {
+          ratedVelocity = boardConfig.velocityLimit;
+          requestMode = MODE_COMMAND_POSITION;
+        }
+        memcpy(&tmpV, _data, sizeof(tmpV));
+        SetPositionSetPoint( tmpV );
+        if (_data[4] == 1) // Need Position & Finished ACK
+        {
+          int32_t TxCanBuf = GetPosition();
+          memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+
+          TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+          TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
+          CAN_Send(&TxHeader, TxData);
+        }
+		  break;
 
     	case 0x06:  // Set Position with Time - currently not used
-		if (runningMode != MODE_COMMAND_POSITION)
-		{
-			requestMode = MODE_COMMAND_POSITION;
-		}
-		float tmpTime = 0;
-		memcpy(&tmpV, _data, sizeof(tmpV));
-		memcpy(&tmpTime, _data + 4, sizeof(tmpTime));
+        if (runningMode != MODE_COMMAND_POSITION)
+        {
+          requestMode = MODE_COMMAND_POSITION;
+        }
+        float tmpTime = 0;
+        memcpy(&tmpV, _data, sizeof(tmpV));
+        memcpy(&tmpTime, _data + 4, sizeof(tmpTime));
 
-		SetPositionSetPointWithTime(
-			(int32_t) (tmpV * MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS),
-			(float) tmpTime
-		);
-		break;
+        SetPositionSetPointWithTime(tmpV, (float) tmpTime);
+		  break;
 
-    	case 0x07:
-		if (runningMode != MODE_COMMAND_POSITION)
-		{
-			requestMode = MODE_COMMAND_POSITION;
-		}
-		// Set VelocityLimit
-		memcpy(&ratedVelocity, _data + 4, sizeof(ratedVelocity));
-		// Set SetPositionSetPoint
-		int32_t tempPosition = 0;
-		memcpy(&tempPosition, _data, sizeof(tempPosition));
-		SetPositionSetPoint(tempPosition);
+    	case 0x07: // Set Position with Time and Velocity Limit
+        if (runningMode != MODE_COMMAND_POSITION)
+        {
+          requestMode = MODE_COMMAND_POSITION;
+        }
+        // Set VelocityLimit (boardConfig.velocityLimit)
+        memcpy(&boardConfig.velocityLimit, _data + 4, sizeof(int32_t));
+        ratedVelocity = boardConfig.velocityLimit;
+        // Set SetPositionSetPoint
+        int32_t tempPosition = 0;
+        memcpy(&tempPosition, _data, sizeof(tempPosition));
+        SetPositionSetPoint(tempPosition);
 
-		// Sending current position to master
-		int32_t TxCanBuf = GetPosition();
-		memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
-		TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
-		TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
-		CAN_Send(&TxHeader, TxData);
-		break;
+        // Sending current position to master
+        int32_t TxCanBuf = GetPosition();
+        memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+        TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+        TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
+        CAN_Send(&TxHeader, TxData);
+		  break;
+
+      /* 0x10~0x1F CMDs with Memory */
+      case 0x11:  // Set Node-ID and Store to Flash
+        memcpy(boardConfig.canNodeId, _data, sizeof(uint32_t));
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x12:  // Set Current-Limit and Store to Flash
+        memcpy(&boardConfig.currentLimit, _data, sizeof(int32_t));
+        ratedCurrent = boardConfig.currentLimit;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x13:  // Set Velocity-Limit and Store to Flash
+        memcpy(&boardConfig.velocityLimit, _data, sizeof(int32_t));
+        ratedVelocity = boardConfig.velocityLimit;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x14:  // Set Acceleration （and Store to Flash）
+        memcpy(&boardConfig.velocityAcc, _data, sizeof(int32_t));
+        velocityAcc = boardConfig.velocityAcc;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x15:  // Apply Home-Position and Store to Flash
+        memcpy(&boardConfig.encoderHomeOffset, _data, sizeof(int32_t));
+        encoderHomeOffset = boardConfig.encoderHomeOffset;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x16:  // Set Auto-Enable and Store to Flash
+        // Not yet implemented.
+      break;
+
+      case 0x17:  // Set DCE Kp
+        memcpy(&dce.kp, _data, sizeof(int32_t));
+        boardConfig.dce_kp = dce.kp;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x18:  // Set DCE Kv
+        memcpy(&dce.kv, _data, sizeof(int32_t));
+        boardConfig.dce_kv = dce.kv;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x19:  // Set DCE Ki
+        memcpy(&dce.ki, _data, sizeof(int32_t));
+        boardConfig.dce_ki = dce.ki;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x1A:  // Set DCE Kd
+        memcpy(&dce.kd, _data, sizeof(int32_t));
+        boardConfig.dce_kd = dce.kd;
+        if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x1B:  // Set Enable Stall-Protect
+        // Not yet implemented. Need to implement stall-protect in the main loop.
+      break;
+
+      case 0x1C:  // Set PID gain
+        memcpy(&pid.kp, _data, sizeof(int16_t));
+        memcpy(&pid.ki, _data + 2, sizeof(int16_t));
+        memcpy(&pid.kd, _data + 4, sizeof(int16_t));
+        boardConfig.pid_kp = pid.kp;
+        boardConfig.pid_ki = pid.ki;
+        boardConfig.pid_kd = pid.kd;
+        if (_data[6] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      break;
+
+      case 0x21: // Get Current
+        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x21;
+        int32_t TxCanBuf = GetFocCurrent();
+        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+        CAN_Send(&TxHeader, TxData);
+      break;
+
+      case 0x22: // Get Velocity
+        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x22;
+        float TxCanBuf = GetVelocity();
+        memcpy(TxData, &TxCanBuf, sizeof(float));
+        TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+        CAN_Send(&TxHeader, TxData);
+      break;
+
+      case 0x23: // Get Position
+        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x23;
+        int32_t TxCanBuf = GetPosition();
+        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
+        CAN_Send(&TxHeader, TxData);
+      break;
+
+      case 0x24: // Get Offset
+        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x24;
+        int32_t TxCanBuf = encoderHomeOffset;
+        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        CAN_Send(&TxHeader, TxData);
+      break;
+
+      case 0x25: // Get temperature
+        // Not yet implemented
+      break;
+
+      case 0x7D:  // Undo Configs
+         boardConfig.configStatus = CONFIG_RESTORE;
+      break;
+      case 0x7E:  // Default Configs
+          boardConfig.configStatus = CONFIG_DEFAULT;
+      break;
+      case 0x7F:  // Reboot
+          HAL_NVIC_SystemReset();
+      break;
 
     	default:
     		break;

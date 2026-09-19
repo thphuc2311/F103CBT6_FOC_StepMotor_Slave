@@ -31,7 +31,7 @@
  * ========================================================================== */
 volatile uint16_t *calibTablePtr = (volatile uint16_t *)APP_CALI_ADDR;
 volatile CalibError_t calibError = CALIB_ERR_NONE;
-volatile CalibState_t calibState  = CALIB_IDLE;
+volatile CalibState_t calibState  = CALIB_DONE;
 bool calibTableValid = false;
 
 /* ==========================================================================
@@ -273,7 +273,7 @@ static void BuildCalibTable(void)
 
 bool Calib_IsRunning(void)
 {
-    return (calibState != CALIB_IDLE) && (calibState != CALIB_DONE);
+    return (calibState != CALIB_START) && (calibState != CALIB_DONE);
 }
 
 uint16_t Calib_GetCalibratedAngleLUT(uint16_t rawAngle)
@@ -308,17 +308,6 @@ bool Calib_IsTableValid(void)
     return calibTableValid;
 }
 
-void Calib_Start(void)
-{
-    goPosition  = CALIB_SUBDIVIDE_STEPS;
-    sampleCount = 0U;
-    resultNum   = 0U;
-    rcdX        = 0;
-    rcdY        = 0;
-    calibError  = CALIB_ERR_NONE;
-    SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
-    calibState  = CALIB_FWD_PREPARE;
-}
 
 /*
  * Calib_Tick20kHz – call from 20 kHz timer ISR while Calib_IsRunning().
@@ -342,13 +331,29 @@ void Calib_Tick20kHz(void)
 
     switch (calibState)
     {
+        case CALIB_START:
+        /* ------------------------------------------------------------------
+         * Initialise state: reset all counters, set goPosition to 1×SUBDIVIDE_STEPS
+         * (first hard step), and energise the motor to hold that position.
+         * Start a new calibration cycle.  The main loop will call BuildCalibTable() after
+         * the ISR has completed all sampling (calibState == CALIB_CALCULATING).
+         * ------------------------------------------------------------------ */
+            goPosition  = CALIB_SUBDIVIDE_STEPS;
+            sampleCount = 0U;
+            resultNum   = 0U;
+            rcdX        = 0;
+            rcdY        = 0;
+            calibError  = CALIB_ERR_NONE;
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
+            calibState  = CALIB_FWD_PREPARE;
+            break;
         /* ------------------------------------------------------------------
          * FWD_PREPARE: rotate one full CW revolution to seat the rotor.
          * goPosition: SUBDIVIDE_STEPS → 2×SUBDIVIDE_STEPS, then reset.
          * ------------------------------------------------------------------ */
         case CALIB_FWD_PREPARE:
             goPosition += CALIB_AUTO_SPEED;
-            SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
             if (goPosition == 2U * CALIB_SUBDIVIDE_STEPS)
             {
                 goPosition  = CALIB_SUBDIVIDE_STEPS;
@@ -380,7 +385,7 @@ void Calib_Tick20kHz(void)
             {
                 goPosition += CALIB_FINE_SPEED;
             }
-            SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
             if (goPosition > 2U * CALIB_SUBDIVIDE_STEPS)
                 calibState = CALIB_BWD_RETURN;
             break;
@@ -391,7 +396,7 @@ void Calib_Tick20kHz(void)
          * ------------------------------------------------------------------ */
         case CALIB_BWD_RETURN:
             goPosition += CALIB_FINE_SPEED;
-            SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
             if (goPosition == (2U * CALIB_SUBDIVIDE_STEPS + CALIB_SOFT_DIVIDE_NUM * 20U))
                 calibState = CALIB_BWD_GAP_DISMISS;
             break;
@@ -401,7 +406,7 @@ void Calib_Tick20kHz(void)
          * ------------------------------------------------------------------ */
         case CALIB_BWD_GAP_DISMISS:
             goPosition -= CALIB_FINE_SPEED;
-            SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
             if (goPosition == 2U * CALIB_SUBDIVIDE_STEPS)
             {
                 sampleCount = 0U;
@@ -431,7 +436,7 @@ void Calib_Tick20kHz(void)
             {
                 goPosition -= CALIB_FINE_SPEED;
             }
-            SetFocCurrentVector(goPosition, CALIB_CURRENT_MA);
+            SetFocCurrentVector(goPosition, boardConfig.calibrationCurrent);
             if (goPosition < CALIB_SUBDIVIDE_STEPS)
                 calibState = CALIB_CALCULATING;
             break;
@@ -462,8 +467,8 @@ void Calib_Tick20kHz(void)
  */
 void Calib_TickMainLoop(void)
 {
-    if (calibState != CALIB_CALCULATING)
-        return;
+    if (calibState != CALIB_CALCULATING) return;
+    
     Driver_Sleep();
     CalibrationDataCheck();
 
