@@ -16,11 +16,14 @@
   *
   ******************************************************************************
   */
+
+#include "board_config.h"
+#include "encoder_calib.h"
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "can.h"
-#include "board_config.h"
-#include "encoder_calib.h"
+
 /* USER CODE BEGIN 0 */
 
 CAN_TxHeaderTypeDef TxHeader;
@@ -192,7 +195,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef* CanHandle)
 
 void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
 {
-	int32_t tmpV = 0;
+	int32_t CanBuffer = 0;
     switch (_cmd)
     {
     	case 0x01:
@@ -203,9 +206,9 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
     	  calibState = CALIB_START;
         if (_data[4] == 1) // Ack Calibration Done
         {
-          txHeader.StdId = (TargetCAN_NodeId << 7) | 0x02; // 0x02 is Do Calibration
+          TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x02; // 0x02 is Do Calibration
           TxData[0] = calibState == CALIB_DONE ? 1u : 0u;
-          CAN_Send(&txHeader, TxData);
+          CAN_Send(&TxHeader, TxData);
         }
       break;
 
@@ -214,8 +217,8 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
         {
           requestMode = MODE_COMMAND_CURRENT;
         }
-        memcpy(&tmpV, _data, sizeof(int32_t));
-        SetCurrentSetPoint(tmpV);
+        memcpy(&CanBuffer, _data, sizeof(int32_t));
+        SetCurrentSetPoint(CanBuffer);
       break;
 
       case 0x04:  // Set Velocity SetPoint
@@ -223,8 +226,8 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
         {
           requestMode = MODE_COMMAND_VELOCITY;
         }
-        memcpy(&tmpV, _data, sizeof(tmpV));
-        SetVelocitySetPoint(tmpV);
+        memcpy(&CanBuffer, _data, sizeof(CanBuffer));
+        SetVelocitySetPoint(CanBuffer);
       break;
 
       case 0x05:  // Set Position SetPoint
@@ -233,12 +236,12 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
           ratedVelocity = boardConfig.velocityLimit;
           requestMode = MODE_COMMAND_POSITION;
         }
-        memcpy(&tmpV, _data, sizeof(tmpV));
-        SetPositionSetPoint( tmpV );
+        memcpy(&CanBuffer, _data, sizeof(CanBuffer));
+        SetPositionSetPoint( CanBuffer );
         if (_data[4] == 1) // Need Position & Finished ACK
         {
-          int32_t TxCanBuf = GetPosition();
-          memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+          CanBuffer = GetPosition();
+          memcpy(TxData, &CanBuffer, sizeof(CanBuffer));
 
           TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
           TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
@@ -252,10 +255,10 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
           requestMode = MODE_COMMAND_POSITION;
         }
         float tmpTime = 0;
-        memcpy(&tmpV, _data, sizeof(tmpV));
+        memcpy(&CanBuffer, _data, sizeof(CanBuffer));
         memcpy(&tmpTime, _data + 4, sizeof(tmpTime));
 
-        SetPositionSetPointWithTime(tmpV, (float) tmpTime);
+        SetPositionSetPointWithTime(CanBuffer, (float) tmpTime);
 		  break;
 
     	case 0x07: // Set Position with Time and Velocity Limit
@@ -272,8 +275,8 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
         SetPositionSetPoint(tempPosition);
 
         // Sending current position to master
-        int32_t TxCanBuf = GetPosition();
-        memcpy(TxData, &TxCanBuf, sizeof(TxCanBuf));
+        CanBuffer = GetPosition();
+        memcpy(TxData, &CanBuffer, sizeof(CanBuffer));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
         TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
         CAN_Send(&TxHeader, TxData);
@@ -281,7 +284,7 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
 
       /* 0x10~0x1F CMDs with Memory */
       case 0x11:  // Set Node-ID and Store to Flash
-        memcpy(boardConfig.canNodeId, _data, sizeof(uint32_t));
+        memcpy(&boardConfig.canNodeId, _data, sizeof(uint32_t));
         if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
       break;
 
@@ -314,25 +317,32 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
       break;
 
       case 0x17:  // Set DCE Kp
-        memcpy(&dce.kp, _data, sizeof(int32_t));
+      {
+    	memcpy(&CanBuffer, _data, sizeof(int32_t));
+        dce.kp = CanBuffer;
         boardConfig.dce_kp = dce.kp;
         if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
+      }
       break;
 
       case 0x18:  // Set DCE Kv
-        memcpy(&dce.kv, _data, sizeof(int32_t));
+        memcpy(&CanBuffer, _data, sizeof(int32_t));
+        dce.kv = CanBuffer;
+//        dce.kv = (int32_t) ( ((uint32_t)_data[3]) | ((uint32_t)_data[2] << 8) | ((uint32_t)_data[1] << 16) | ((uint32_t)_data[1] << 24) );
         boardConfig.dce_kv = dce.kv;
         if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
       break;
 
       case 0x19:  // Set DCE Ki
-        memcpy(&dce.ki, _data, sizeof(int32_t));
+    	memcpy(&CanBuffer, _data, sizeof(int32_t));
+    	dce.ki = CanBuffer;
         boardConfig.dce_ki = dce.ki;
         if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
       break;
 
       case 0x1A:  // Set DCE Kd
-        memcpy(&dce.kd, _data, sizeof(int32_t));
+    	memcpy(&CanBuffer, _data, sizeof(int32_t));
+    	dce.kd = CanBuffer;
         boardConfig.dce_kd = dce.kd;
         if (_data[4] == 1) boardConfig.configStatus = CONFIG_COMMIT;
       break;
@@ -342,9 +352,10 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
       break;
 
       case 0x1C:  // Set PID gain
-        memcpy(&pid.kp, _data, sizeof(int16_t));
-        memcpy(&pid.ki, _data + 2, sizeof(int16_t));
-        memcpy(&pid.kd, _data + 4, sizeof(int16_t));
+        pid.kp = (int16_t) ( (uint16_t)_data[0] | ( (uint16_t)_data[1] << 8) );
+        pid.ki = (int16_t) ( (uint16_t)_data[2] | ( (uint16_t)_data[3] << 8) );
+        pid.kd = (int16_t) ( (uint16_t)_data[4] | ( (uint16_t)_data[5] << 8) );
+
         boardConfig.pid_kp = pid.kp;
         boardConfig.pid_ki = pid.ki;
         boardConfig.pid_kd = pid.kd;
@@ -352,33 +363,33 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
       break;
 
       case 0x21: // Get Current
-        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x21;
-        int32_t TxCanBuf = GetFocCurrent();
-        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x21;
+        CanBuffer = GetFocCurrent();
+        memcpy(TxData, &CanBuffer, sizeof(int32_t));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
         CAN_Send(&TxHeader, TxData);
       break;
 
       case 0x22: // Get Velocity
-        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x22;
-        float TxCanBuf = GetVelocity();
-        memcpy(TxData, &TxCanBuf, sizeof(float));
+        TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x22;
+        float temp = GetVelocity();
+        memcpy(TxData, &temp, sizeof(float));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
         CAN_Send(&TxHeader, TxData);
       break;
 
       case 0x23: // Get Position
-        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x23;
-        int32_t TxCanBuf = GetPosition();
-        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x23;
+        CanBuffer = GetPosition();
+        memcpy(TxData, &CanBuffer, sizeof(int32_t));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
         CAN_Send(&TxHeader, TxData);
       break;
 
       case 0x24: // Get Offset
-        txHeader.StdId = (boardConfig.canNodeId << 7) | 0x24;
-        int32_t TxCanBuf = encoderHomeOffset;
-        memcpy(TxData, &TxCanBuf, sizeof(int32_t));
+        TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x24;
+        CanBuffer = encoderHomeOffset;
+        memcpy(TxData, &CanBuffer, sizeof(int32_t));
         CAN_Send(&TxHeader, TxData);
       break;
 

@@ -85,15 +85,6 @@ int16_t SinMapValues_PhaseA_debug1 = 0, SinMapValues_PhaseB_debug1 = 0;
 int16_t SinMapValues_PhaseA_debug2 = 0, SinMapValues_PhaseB_debug2 = 0;
 
 /* PID controller state (velocity loop) */
-typedef struct
-{
-    int16_t kp, ki, kd;
-    int32_t vError, vErrorLast;
-    int32_t outputKp, outputKi, outputKd;
-    int32_t integralRound, integralRemainder;
-    int32_t output;
-} PID_t;
-
 volatile PID_t pid;
 
 /* DCE controller state (position loop) – typedef in main.h */

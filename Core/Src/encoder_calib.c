@@ -273,7 +273,7 @@ static void BuildCalibTable(void)
 
 bool Calib_IsRunning(void)
 {
-    return (calibState != CALIB_START) && (calibState != CALIB_DONE);
+    return calibState != CALIB_DONE;
 }
 
 uint16_t Calib_GetCalibratedAngleLUT(uint16_t rawAngle)

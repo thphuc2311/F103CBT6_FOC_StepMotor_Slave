@@ -85,7 +85,7 @@ bool FlashCalib_IsValid(void)
     /* Check 1: boardConfig.calibStatus == true (in APP_DATA) */
     BoardConfig_t cfg;
     FlashUserData_Read(&cfg, sizeof(cfg));
-    if (!cfg.calibStatus)
+    if (cfg.calibStatus != true)
         return false;
 
     /* Check 2: scan LUT for 0xFFFF (erased entries) */

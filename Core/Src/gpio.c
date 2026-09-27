@@ -69,15 +69,10 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LED_Pin */
-  GPIO_InitStruct.Pin = LED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : Output_Ap_Pin Output_Am_Pin Output_Bp_Pin Output_Bm_Pin */
-  GPIO_InitStruct.Pin = Output_Ap_Pin|Output_Am_Pin|Output_Bp_Pin|Output_Bm_Pin;
+  /*Configure GPIO pins : LED_Pin Output_Ap_Pin Output_Am_Pin Output_Bp_Pin
+                           Output_Bm_Pin */
+  GPIO_InitStruct.Pin = LED_Pin|Output_Ap_Pin|Output_Am_Pin|Output_Bp_Pin
+                          |Output_Bm_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

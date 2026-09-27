@@ -63,6 +63,18 @@ extern volatile int32_t velocityAcc;
 extern volatile int32_t encoderHomeOffset;
 extern volatile int32_t ratedCurrent;
 
+/* PID controller state (velocity loop) */
+typedef struct
+{
+    int16_t kp, ki, kd;
+    int32_t vError, vErrorLast;
+    int32_t outputKp, outputKi, outputKd;
+    int32_t integralRound, integralRemainder;
+    int32_t output;
+} PID_t;
+
+extern volatile PID_t pid;
+
 /* DCE controller (position loop) – defined in main.c */
 typedef struct
 {
