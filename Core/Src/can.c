@@ -206,7 +206,7 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
     	  calibState = CALIB_START;
         if (_data[4] == 1) // Ack Calibration Done
         {
-          TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x02; // 0x02 is Do Calibration
+          TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x02; // 0x02 is Do Calibration
           TxData[0] = calibState == CALIB_DONE ? 1u : 0u;
           CAN_Send(&TxHeader, TxData);
         }
@@ -244,7 +244,7 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
           memcpy(TxData, &CanBuffer, sizeof(CanBuffer));
 
           TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
-          TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
+          TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x23; // 0x23 is GetPosition, also.
           CAN_Send(&TxHeader, TxData);
         }
 		  break;
@@ -278,7 +278,7 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
         CanBuffer = GetPosition();
         memcpy(TxData, &CanBuffer, sizeof(CanBuffer));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
-        TxHeader.StdId = (TargetCAN_NodeId << 7) | 0x23; // 0x23 is GetPosition, also.
+        TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x23; // 0x23 is GetPosition, also.
         CAN_Send(&TxHeader, TxData);
 		  break;
 
@@ -372,8 +372,8 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
 
       case 0x22: // Get Velocity
         TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x22;
-        float temp = GetVelocity();
-        memcpy(TxData, &temp, sizeof(float));
+        int32_t temp = GetVelocity();
+        memcpy(TxData, &temp, sizeof(int32_t));
         TxData[4] = StepperState == STATE_FINISH ? 1 : 0;
         CAN_Send(&TxHeader, TxData);
       break;
@@ -393,8 +393,18 @@ void OnCanCmd(uint8_t _cmd, uint8_t* _data, uint32_t _len)
         CAN_Send(&TxHeader, TxData);
       break;
 
-      case 0x25: // Get temperature
-        // Not yet implemented
+      case 0x25: // Get Current-Limit
+    	TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x25;
+    	CanBuffer = boardConfig.currentLimit;
+    	memcpy(TxData, &CanBuffer, sizeof(int32_t));
+    	CAN_Send(&TxHeader, TxData);
+	  break;
+
+      case 0x26: // Get Mcu & NTC temperature
+		  TxHeader.StdId = (boardConfig.canNodeId << 7) | 0x26;
+		  memcpy(TxData		, &MCU_Temperature, sizeof(float));
+		  memcpy(TxData + 4	, &NTC_Temperature, sizeof(float));
+		  CAN_Send(&TxHeader, TxData);
       break;
 
       case 0x7D:  // Undo Configs

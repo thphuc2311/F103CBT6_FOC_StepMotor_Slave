@@ -63,6 +63,8 @@ extern volatile int32_t velocityAcc;
 extern volatile int32_t encoderHomeOffset;
 extern volatile int32_t ratedCurrent;
 
+extern float MCU_Temperature, NTC_Temperature;
+
 /* PID controller state (velocity loop) */
 typedef struct
 {
@@ -107,7 +109,7 @@ extern void SetCurrentSetPoint(int32_t _cur);
 
 extern int32_t GetPosition();
 extern int32_t GetFocCurrent();
-extern float  GetVelocity();
+extern int32_t  GetVelocity();
 extern void SetPositionSetPoint(int32_t _pos);
 
 extern bool SetPositionSetPointWithTime(int32_t _pos, float _time);

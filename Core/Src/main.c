@@ -18,7 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "can.h"
+#include "dma.h"
 #include "spi.h"
 #include "tim.h"
 #include "gpio.h"
@@ -120,6 +122,10 @@ volatile int32_t posVelocityIntegral   = 0, posTrackVelocity = 0;
 volatile int32_t posPositionIntegral   = 0, posTrackPosition = 0;
 volatile int32_t posGoLocation         = 0, posGoVelocity    = 0;
 
+uint16_t ADC_VAL[3];
+float Vdda_mV = 0.0f, MCU_Temperature = 0.0f, NTC_Temperature = 0.0f;
+volatile bool ADC_ConvertReady = false;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -136,9 +142,9 @@ int32_t GetPosition ()
 	return (realPosition - encoderHomeOffset);
 }
 
-float GetVelocity ()
+int32_t GetVelocity ()
 {
-	return (float) estVelocity / (float) MOTOR_ONE_CIRCLE_SUBDIVIDE_STEPS;
+	return estVelocity;
 }
 
 int32_t GetFocCurrent ()
@@ -874,6 +880,14 @@ void CAN_SetVelocitySetPoint(uint8_t _val)
     CAN_Send(&TxHeader, canBuf);
 }
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+	if(hadc->Instance == ADC1)
+	{
+		ADC_ConvertReady = true;
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -905,14 +919,17 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_CAN_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_SPI1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
   HAL_TIM_Base_Start_IT(&htim3);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_VAL, 3);
 
 //  /*---------- Load BoardConfig from flash ----------*/
   if (!BoardConfig_Load())
@@ -955,6 +972,7 @@ int main(void)
   PosTracker_SetVelocityAcc(velocityAcc);
   CurrentTracker_SetCurrentAcc(ratedCurrentAcc);
   posSpeedLockingBrake = velocityAcc / 1000;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -985,9 +1003,24 @@ int main(void)
       BoardConfig_SetDefaults();
       HAL_NVIC_SystemReset();
     }
-
     /* Normal motion control starts once calibration is complete */
     
+    // Context: ADC convert too fast, its stuck in callback function, already change to DMA normal mode,
+    // but seem like them convert unstable 3 ADC converter. Need check further DMA flow
+    if(ADC_ConvertReady == true)
+    {
+    	ADC_ConvertReady = false;
+    	HAL_ADC_Stop_DMA(&hadc1); // F103 DMA normal mode, need stop DMA before restart.
+
+    	Vdda_mV = (1200.0f * 4095.0f) / (float)ADC_VAL[0]; 	// estimate Vdda_Vref
+		float Vsense = (float)ADC_VAL[1] * Vdda_mV / 4095; // Vsense of ADC temperature
+
+		MCU_Temperature = 25 + ((1430 - Vsense)/4.3);
+
+    	NTC_Temperature = NTC_GetTemperature(ADC_VAL[2]);
+    	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_VAL, 3);
+    }
+
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
@@ -1001,6 +1034,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -1027,6 +1061,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
